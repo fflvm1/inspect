@@ -7,6 +7,7 @@
 #include <pwd.h>
 #include <grp.h>
 #include <ctime>
+#include <cstring>
 
 int main(int argc, char * argv[]) {
     std::cout << "-- i n s p e c t. --\n";

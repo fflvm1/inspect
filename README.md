@@ -46,7 +46,11 @@ To check info of a file, run ```./path/to/inspect /somefile``` in the terminal (
 **Example with /etc:**
 
 ```./Users/flare/Downloads/inspect-macos-arm64 /etc```
+### Multiple files (version 1.1 and above)
+Since version 1.1, the user can include multiple paths and get info for all of them without the need of restarting the app.
+**Example with the home directory and /etc:**
 
+``./Users/flare/Downloads/inspect-macos-arm64 /Users/flare /etc``
 ### Arguments
 If you want to check the app version, see all commands, or enable Nerd Mode, you can use arguments. 
 

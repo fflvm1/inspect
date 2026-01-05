@@ -8,63 +8,19 @@
 #include <grp.h>
 #include <ctime>
 #include <cstring>
+#include <vector>
+#include <string>
 
-int main(int argc, char * argv[]) {
-    std::cout << "-- i n s p e c t. --\n";
-    
-    // Print usage guide if less then two arguments are given by the user and quit abruptly
-    if (argc < 2) {
-        std::cerr << "Usage: inspect <path>\n";
-        return 1;
-    }
-    
-    // Define arguments
-    struct option long_options[] = {
-            {"ver", no_argument, nullptr, 'v'}, // Version argument
-            {"help", no_argument, nullptr, 'h'},    // Help argument
-            {"nerd", no_argument, nullptr, 'n'},    // Nerd argument
-            {0,0,0,0}
-        };
+bool nerd = false;  // Nerd mode status
 
-        int opt;    // Argument
-        int option_index = 0;   // Argument index
-        bool nerd = false;  // Nerd mode status
-
-        // Argument code
-        while ((opt = getopt_long(argc, argv, "vhn", long_options, &option_index)) != -1) {
-            switch (opt) {
-                case 'v':   // Version argument
-                    std::cout << "by Vova Flare\n";
-                    std::cout << "version 1.0\n";
-                    std::cout << "a basic POSIX utility for inspecting file metadata.\n";
-                    std::cout << "made in Xcode on a trusty iMac 13,1 from 2012.\n";
-                    std::cout << "github: https://github.com/fflvm1/inspect\n";
-                    return 0;
-                case 'h':   // Help argument
-                    std::cout << "Usage: inspect <file> [options]\n";
-                    std::cout << "Version: inspect -v or --ver\n";
-                    std::cout << "Help: inspect -h or --h\n";
-                    std::cout << "Hiding unecessary options: inspect <file> -n or --nerd\n";
-                    return 0;
-                case 'n':   // Nerd argument
-                    nerd = true;    // Enable nerd mode
-                    std::cout << "inspect: enabled 'nerd mode'.\n";
-                    std::cout << "------\n";
-                    break;
-                default:    // Invalid argument
-                    std::cerr << "inspect: unknown option\n";
-                    return 1;
-            }
-        }
-    
-    // Get path from the running string
-    const char* path = argv[optind];
-       struct stat info;    // Get info
+// Inspect path function
+int inspect_path (const char* path) {
+    struct stat info;    // Get info
         // Check whether the path is valid, and if not, quit abruptly
-       if (lstat(path, &info) != 0) {
-           std::cerr << "inspect: cannot access " << path << ": "
-                     << std::strerror(errno) << "\n";
-           return 1;
+    if (lstat(path, &info) != 0) {
+        std::cerr << "inspect: cannot access " << path << ": "
+        << std::strerror(errno) << "\n";
+        return 1;
        }
     
     // Show the path of the inspected file/directory/whatever (I'll call this an object)
@@ -230,3 +186,77 @@ int main(int argc, char * argv[]) {
     return 0;
 }
 
+
+int main(int argc, char * argv[]) {
+    std::cout << "-- i n s p e c t. --\n";
+    
+    // Print usage guide if less then two arguments are given by the user and quit abruptly
+    if (argc < 2) {
+        std::cerr << "Usage: inspect <path/s>\n";
+        return 1;
+    }
+    
+    // Define arguments
+    struct option long_options[] = {
+            {"ver", no_argument, nullptr, 'v'}, // Version argument
+            {"help", no_argument, nullptr, 'h'},    // Help argument
+            {"nerd", no_argument, nullptr, 'n'},    // Nerd argument
+            {0,0,0,0}
+        };
+
+        int opt;    // Argument
+        int option_index = 0;   // Argument index
+
+        // Argument code
+        while ((opt = getopt_long(argc, argv, "vhn", long_options, &option_index)) != -1) {
+            switch (opt) {
+                case 'v':   // Version argument
+                    std::cout << "by Vova Flare\n";
+                    std::cout << "version 1.1\n";
+                    std::cout << "a basic POSIX utility for inspecting file metadata.\n";
+                    std::cout << "made in Xcode on a trusty iMac 13,1 from 2012.\n";
+                    std::cout << "github: https://github.com/fflvm1/inspect\n";
+                    return 0;
+                case 'h':   // Help argument
+                    std::cout << "Usage: inspect <path/s> [options]\n";
+                    std::cout << "Version: inspect -v or --ver\n";
+                    std::cout << "Help: inspect -h or --h\n";
+                    std::cout << "Hiding unecessary options: inspect <path/s> -n or --nerd\n";
+                    return 0;
+                case 'n':   // Nerd argument
+                    nerd = true;    // Enable nerd mode
+                    std::cout << "inspect: enabled 'nerd mode'.\n";
+                    std::cout << "------\n";
+                    break;
+                default:    // Invalid argument
+                    std::cerr << "inspect: unknown option\n";
+                    return 1;
+            }
+        }
+    
+    // Create array storing every path in the prompt
+    std::vector<char*> paths;
+    
+    // Add all found paths to an array
+    for (int i = optind; i < argc; i++) {
+        paths.emplace_back(argv[i]);
+    }
+    
+    // Run through each found path
+    for (int i = 0; i < paths.size(); i++) {
+        // Get info
+        int exit_code = inspect_path(paths[i]);
+        
+        // If a path failed opening, quit abruptly
+        if (exit_code != 0) {
+            return 1;
+        }
+        
+        // Add a nice separator if there is another path in the queue
+        if (i != paths.size() - 1) {
+            std::cout << "------\n";
+        }
+    }
+    
+    return 0;
+}

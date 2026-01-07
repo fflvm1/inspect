@@ -58,11 +58,12 @@ If you want to check the app version, see all commands, or enable Nerd Mode, you
 ```/path/to/inspect /somedir --nerd```
 
 Full list of arguments:
-| Argument | Short Argument | Description |
-|----------|----------------|-------------|
-| --help   | -h  | Shows help information |
-| --ver  |  -v  | Shows utility version and some credits |
-| --nerd |  -n | Enables Nerd Mode |
+| Argument | Short Argument |  Min. Version  | Description |
+|----------|----------------|-----------|-------------|
+| --help   | -h  |  1.0 and up  | Shows help information |
+| --ver  |  -v  |  1.0 and up  |  Shows utility version and some credits |
+| --nerd |  -n |  1.0 and up  | Enables Nerd Mode |
+|  --json  |  -j  |  1.2 and up  | Show info in a JSON-like format |
 
 ## Installation
 ### Compiling yourself

@@ -64,6 +64,7 @@ Full list of arguments:
 | --ver  |  -v  |  1.0 and up  |  Shows utility version and some credits |
 | --nerd |  -n |  1.0 and up  | Enables Nerd Mode |
 |  --json  |  -j  |  1.2 and up  | Show info in a JSON-like format |
+|  --continue-on-error  |  -c  |  1.2.1 and up  |  Continue processing remaining paths if one fails.  |
 
 ## Installation
 ### Compiling yourself

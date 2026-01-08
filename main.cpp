@@ -11,9 +11,10 @@
 #include <vector>
 #include <string>
 
-std::string utilver = "1.2";    // inspect version
+std::string utilver = "1.2.1";    // inspect version
 bool nerd = false;  // Nerd mode status
 bool json = false;  // JSON format switch
+bool skip = false;  // Skip problematic paths
 
 // Info grabber
 struct PathData {
@@ -34,6 +35,7 @@ struct PathData {
     bool writable;  // Is it writeable (at least one of the three should be able to write to it)
     bool executable;    // Is it executable (at least one of the three should be able to execute it)
     bool isLast;    // Is this path is the last in the queue?
+    bool accessError = false;   // Error retrieving info from path
     uid_t UID;  // User ID
     struct passwd* pw;  // Password to grab username via UID
     gid_t GID;  // Group ID
@@ -164,13 +166,6 @@ struct PathData {
         std::cout << "      \"uid\": " << UID << ",\n";
         std::cout << "      \"gid\": " << GID << "\n";
         std::cout << "    }";
-
-        // Add a comma if there is another path in the queue (for proper JSON formatting)
-        if (!isLast) {
-            std::cout << ",";
-        }
-
-        std::cout << "\n";
     }
     
     // Changing some problematic characters in the path to ensure that the JSON path isn't broken
@@ -209,12 +204,15 @@ struct PathData {
     PathData(const char* p, bool l) : path(p), isLast(l) {
         // Trying to gather info from path
         if (lstat(path, &info) != 0) {
-            // Throwing an error if the path is inaccessible
-            std::cerr << "inspect: cannot access " << path << ": "
-            << std::strerror(errno) << "\n";
-            // Throwing an error to ensure that the utility stops here
-            throw std::runtime_error("access denied.");
-           }
+            accessError = true; // Marking the path as not openable
+            if (!skip) {    // Stopping the util from closing if using--continue-on-error argument
+                // Throwing an error if the path is inaccessible
+                std::cerr << "inspect: cannot access " << path << ": "
+                << std::strerror(errno) << "\n";
+                // Throwing an error to ensure that the utility stops here
+                throw std::runtime_error("access denied.");
+            }
+        }
         
         // Gathering info from path
         fileType = getFileType();   // Type
@@ -239,12 +237,6 @@ struct PathData {
         atime = std::ctime(&info.st_atime);
         mtime = std::ctime(&info.st_mtime);
         ctime = std::ctime(&info.st_ctime);
-        
-        if (!json) {
-            printInfo();    // Print regular style info
-        }   else {
-            printJson();    // Print info in JSON style
-        }
     }
 };
 
@@ -267,6 +259,7 @@ int main(int argc, char * argv[]) {
             {"help", no_argument, nullptr, 'h'},    // Help argument
             {"nerd", no_argument, nullptr, 'n'},    // Nerd argument
             {"json", no_argument, nullptr, 'j'},    // JSON argument
+            {"continue-on-error", no_argument, nullptr, 'c'},   // Skip problematic paths
             {0,0,0,0}
         };
 
@@ -275,7 +268,7 @@ int main(int argc, char * argv[]) {
         bool shownBanner = false;   // Whether the banner was shown or not
 
         // Argument code
-        while ((opt = getopt_long(argc, argv, "vhnj", long_options, &option_index)) != -1) {
+        while ((opt = getopt_long(argc, argv, "vhnjc", long_options, &option_index)) != -1) {
             switch (opt) {
                 case 'v':   // Version argument
                     showBanner();
@@ -288,7 +281,7 @@ int main(int argc, char * argv[]) {
                 case 'h':   // Help argument
                     showBanner();
                     std::cout << "Usage: inspect <path/s> [arguments]\n\n";
-                    std::cout << "Options:\n";
+                    std::cout << "Arguments:\n";
                     std::cout << "  -v, --ver       Show version information\n";
                     std::cout << "  -h, --help      Show this help message\n";
                     std::cout << "  -n, --nerd      Hide redundant info for power users\n";
@@ -296,6 +289,11 @@ int main(int argc, char * argv[]) {
                     std::cout << "JSON output:\n";
                     std::cout << "  To save JSON to a file:\n";
                     std::cout << "   inspect <path/s> --json > output.json\n";
+                    std::cout << "Error handling:\n";
+                    std::cout << "  --continue-on-error, -c";
+                    std::cout << "      Continue processing remaining paths if one fails.\n                         ";
+                    std::cout << "      By default, inspect exits immediately on the first error.\n";
+
 
                     return 0;
                 case 'n':   // Nerd argument
@@ -303,6 +301,9 @@ int main(int argc, char * argv[]) {
                     break;
                 case 'j':   // JSON argument
                     json = true;    // Remember to display text in the JSON format
+                    break;
+                case 'c':   // Continue on error argument
+                    skip = true;    // Enable skipping unopenable paths
                     break;
                 default:    // Invalid argument
                     showBanner();
@@ -334,6 +335,19 @@ int main(int argc, char * argv[]) {
         paths.emplace_back(argv[i]);
     }
     
+    std::vector<PathData> datalist; // Array storing data for each path
+
+    // Add data of each path to the database
+    try {
+        for (std::size_t i = 0; i < paths.size(); ++i) {
+            bool isLast = (i + 1 == paths.size());  // Last path in the database?
+            datalist.emplace_back(paths[i], isLast);
+        }
+    // Kill the utility if any path is inaccessible
+    } catch (const std::exception&) {
+            return 1;
+    }
+    
     // Add basic info about inspect to the JSON (if using JSON format)
     if (json) {
         std::cout << "{\n";
@@ -342,22 +356,37 @@ int main(int argc, char * argv[]) {
         std::cout << "  \"schema_version\": 1,\n";
         std::cout << "  \"data\": [\n";
     }
-    
-    // Run through each found path
-    for (int i = 0; i < paths.size(); i++) {
-        bool isLast = (i == paths.size() - 1);
 
-        try {
-            PathData pd(paths[i], isLast);  // Get data from path
-        } catch (const std::exception&) {
-            return 1;   // Show error code 1 if there was an error extracting data
+    // Print data of each path
+    for (std::size_t i = 0; i < datalist.size(); i++) {
+        // Showing skipping warning if a path is unopenable (--continue-on-error)
+        if (skip && datalist[i].accessError) {
+            if (!json) {
+                std::cerr << "inspect: skipping problematic path (" << datalist[i].path << ")\n";
+                std::cout << (!datalist[i].isLast ? "------\n" : "");
+            }
+            continue;
+        }
+        
+        if (!json) {
+            // Regular format
+            datalist[i].printInfo();
+        } else {
+            // JSON format (if --json argument is used)
+            datalist[i].printJson();
         }
 
-        // Some nice formatting to separate paths if more than 1 are inspected
-        if (!json && !isLast) {
+        // Visually separating data if multiple paths exist
+        if (!json && !datalist[i].isLast) {
             std::cout << "------\n";
+        }   else if (json) { // Add a comma if there is another path in the queue (JSON formatting)
+            if (i + 1 < datalist.size())
+                // Verify if the file is the last and if it's openable (also used for --continue-on-error)
+                std::cout << ((!datalist[i + 1].accessError || !datalist[i + 1].isLast) ? ",\n" : "\n");
+            else
+                std::cout << "\n";
         }
-    }
+}
     
     // Add necessary brackets to end the JSON (if using JSON formatting)
     if (json) {

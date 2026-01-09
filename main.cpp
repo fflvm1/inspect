@@ -11,7 +11,7 @@
 #include <vector>
 #include <string>
 
-std::string utilver = "1.2.1";    // inspect version
+std::string utilver = "1.2.2";    // inspect version
 bool nerd = false;  // Nerd mode status
 bool json = false;  // JSON format switch
 bool skip = false;  // Skip problematic paths
@@ -32,7 +32,7 @@ struct PathData {
     bool e_group;   // Can group execute file/directory/whatever?
     bool e_other;   // Can other execute file/directory/whatever?
     bool readable;  // Is it readable (at least one of the three should be able to read it)
-    bool writable;  // Is it writeable (at least one of the three should be able to write to it)
+    bool writable;  // Is it writable (at least one of the three should be able to write to it)
     bool executable;    // Is it executable (at least one of the three should be able to execute it)
     bool isLast;    // Is this path is the last in the queue?
     bool accessError = false;   // Error retrieving info from path
@@ -100,7 +100,7 @@ struct PathData {
             std::cout << "\n";
             
             // Show if the object is writable and by who (hidden in nerd mode)
-            std::cout << "Writeable: " << (writable ? "yes" : "no");
+            std::cout << "Writable: " << (writable ? "yes" : "no");
             if (writable) {
                 std::cout << " (";
                 bool first = true;
@@ -248,7 +248,6 @@ void showBanner() {
 int main(int argc, char * argv[]) {
     // Print usage guide if less then two arguments are given by the user and quit abruptly
     if (argc < 2) {
-        showBanner();
         std::cerr << "Usage: inspect <path/s>\n";
         return 1;
     }
@@ -265,7 +264,6 @@ int main(int argc, char * argv[]) {
 
         int opt;    // Argument
         int option_index = 0;   // Argument index
-        bool shownBanner = false;   // Whether the banner was shown or not
 
         // Argument code
         while ((opt = getopt_long(argc, argv, "vhnjc", long_options, &option_index)) != -1) {
@@ -279,7 +277,6 @@ int main(int argc, char * argv[]) {
                     std::cout << "github: https://github.com/fflvm1/inspect\n";
                     return 0;
                 case 'h':   // Help argument
-                    showBanner();
                     std::cout << "Usage: inspect <path/s> [arguments]\n\n";
                     std::cout << "Arguments:\n";
                     std::cout << "  -v, --ver       Show version information\n";
@@ -288,7 +285,7 @@ int main(int argc, char * argv[]) {
                     std::cout << "  --json          Print machine-readable JSON to standard output\n\n";
                     std::cout << "JSON output:\n";
                     std::cout << "  To save JSON to a file:\n";
-                    std::cout << "   inspect <path/s> --json > output.json\n";
+                    std::cout << "    inspect <path/s> --json > output.json\n";
                     std::cout << "Error handling:\n";
                     std::cout << "  --continue-on-error, -c";
                     std::cout << "      Continue processing remaining paths if one fails.\n                         ";
@@ -306,26 +303,9 @@ int main(int argc, char * argv[]) {
                     skip = true;    // Enable skipping unopenable paths
                     break;
                 default:    // Invalid argument
-                    showBanner();
-                    std::cerr << "inspect: unknown option\n";
                     return 1;
             }
-            shownBanner = true; // Mark banner as shown so that it doesn't show again
         }
-    
-    // Show the banner if it was never shown before
-    if (!shownBanner) {
-        showBanner();
-        shownBanner = true;
-    }
-    
-    // Show the enabling message for Nerd Mode if not using JSON formatting
-    if (nerd && !json) {
-        showBanner();
-        shownBanner = true;
-        std::cout << "inspect: enabled 'nerd mode'.\n";
-        std::cout << "------\n";
-    }
     
     // Create array storing every path in the prompt
     std::vector<char*> paths;
@@ -357,10 +337,15 @@ int main(int argc, char * argv[]) {
         std::cout << "  \"data\": [\n";
     }
 
+    std::vector<std::string> problematicPaths;  // Array storing problematic path
+    
     // Print data of each path
     for (std::size_t i = 0; i < datalist.size(); i++) {
-        // Showing skipping warning if a path is unopenable (--continue-on-error)
+        // Adding path to the problematic array if any issues were found
         if (skip && datalist[i].accessError) {
+            problematicPaths.emplace_back(datalist[i].path);
+            
+            // Showing skipping warning if a path is unopenable (--continue-on-error)
             if (!json) {
                 std::cerr << "inspect: skipping problematic path (" << datalist[i].path << ")\n";
                 std::cout << (!datalist[i].isLast ? "------\n" : "");
@@ -388,10 +373,24 @@ int main(int argc, char * argv[]) {
         }
 }
     
-    // Add necessary brackets to end the JSON (if using JSON formatting)
+    // Add necessary brackets to end the JSON and display problematic paths (if using JSON formatting)
     if (json) {
         std::cout << "  ]\n";
         std::cout << "}\n";
+        
+        // If any problematic paths were found
+        if (problematicPaths.size() > 0) {
+            std::cerr << "\n";
+            
+            // Search for and display every problematic path at the end
+            for (size_t i = 0; i < problematicPaths.size(); i++) {
+                std::cerr << "inspect: skipped problematic path (" << problematicPaths[i] << ")\n";
+            }
+            return 1;   // Exit code 1
+        }
+    }   else {  // If bot using JSON mode
+        if (problematicPaths.size() > 0)
+            return 1;   // Ensure that exiting code is 1
     }
     
     return 0;

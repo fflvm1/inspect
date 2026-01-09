@@ -16,7 +16,7 @@ Type: symlink
 Size: 11 bytes
 Permissions: rwxr-xr-x
 Readable: yes (user, group, other)
-Writeable: yes (user)
+Writable: yes (user)
 Executable: yes (user, group, other)
 Owner: root (UID 0)
 Group: wheel (GID 0)
@@ -63,14 +63,14 @@ Full list of arguments:
 | --help   | -h  |  1.0 and up  | Shows help information |
 | --ver  |  -v  |  1.0 and up  |  Shows utility version and some credits |
 | --nerd |  -n |  1.0 and up  | Enables Nerd Mode |
-|  --json  |  -j  |  1.2 and up  | Show info in a JSON-like format |
+|  --json  |  -j  |  1.2 and up  | Show info in JSON format |
 |  --continue-on-error  |  -c  |  1.2.1 and up  |  Continue processing remaining paths if one fails.  |
 
 ## Installation
 ### Compiling yourself
-If you prefer compiling the code yourself, simply download the source code and compile ```main.cpp``` via your prefered compilator, like **clang** or **gcc**. Yep, it's the only thing you need to compile and run. The prefered usage platforms are **macOS, Linux and FreeBSD**. **I don't plan supporting anything else (that is UNIX-like, of course) anytime soon.**
+If you prefer compiling the code yourself, simply download the source code and compile ```main.cpp``` via your preferred compiler, like **clang** or **gcc**. Yep, it's the only thing you need to compile and run. The preferred usage platforms are **macOS, Linux and FreeBSD**. **I don't plan supporting anything else (that is UNIX-like, of course) anytime soon.**
 ### Downloading a pre-buit binary
-If you're too lazy to compile the thing yourself, simply go to **Releases** of this GitHub page and grab the latest version of inspect for your prefered platform and follow the instructions.
+If you're too lazy to compile the thing yourself, simply go to **Releases** of this GitHub page and grab the latest version of inspect for your preferred platform and follow the instructions.
 
 **macOS Note: Install ```inspect-macos-x86_64.zip``` only on Intel Macs. Apple are planning to drop support for Rosetta 2, which is why for Apple Silicon users, i strongly recommend the native ```inspect-macos-arm64.zip```**.
 # Thank you for trying inspect!

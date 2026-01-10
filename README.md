@@ -69,7 +69,7 @@ Full list of arguments:
 ## Installation
 ### Compiling yourself
 If you prefer compiling the code yourself, simply download the source code and compile ```main.cpp``` via your preferred compiler, like **clang** or **gcc**. Yep, it's the only thing you need to compile and run. The preferred usage platforms are **macOS, Linux and FreeBSD**. **I don't plan supporting anything else (that is UNIX-like, of course) anytime soon.**
-### Downloading a pre-buit binary
+### Downloading a pre-built binary
 If you're too lazy to compile the thing yourself, simply go to **Releases** of this GitHub page and grab the latest version of inspect for your preferred platform and follow the instructions.
 
 **macOS Note: Install ```inspect-macos-x86_64.zip``` only on Intel Macs. Apple are planning to drop support for Rosetta 2, which is why for Apple Silicon users, i strongly recommend the native ```inspect-macos-arm64.zip```**.

@@ -11,17 +11,18 @@
 #include <vector>
 #include <string>
 
-std::string utilver = "1.2.2";    // inspect version
+std::string utilver = "1.3";    // inspect version
 bool nerd = false;  // Nerd mode status
 bool json = false;  // JSON format switch
 bool skip = false;  // Skip problematic paths
+bool line = false;  // Line mode
 
 // Info grabber
 struct PathData {
     const char* path;   // Path to file/directory/whatever
-    std::string fileType;   // Extracted file type (regular, directory, etc.)
+    std::string type;   // Extracted type (regular file, directory, symlink, other)
     struct stat info;    // Info getter
-    off_t file_size; // Extracted size
+    off_t raw_size; // Extracted size
     bool r_user;    // Can user read file/directory/whatever?
     bool r_group;   // Can group read file/directory/whatever?
     bool r_other;   // Can other read file/directory/whatever?
@@ -43,44 +44,24 @@ struct PathData {
     std::string atime;  // Access time
     std::string mtime;  // Modify time
     std::string ctime;  // Status time
+    std::string owner;  // Owner name (if found)
+    std::string group;  // Group name (if found)
+    std::string perms;  // Permissions string
+    int perm_mode;  // Permissions mode
     
     // Printing info
     void printInfo() {
         std::cout << "Inspecting: " << path << std::endl;   // Show inspected path
-        std::cout << "Type: " << fileType << std::endl; // Show type from path
-        // Annotate size, to ensure that there is no confusion between directory and contents sizes (in case of a directory)
-        std::cout << "Size" << ((fileType == "directory") && (!nerd) ? " (directory entry): " : ": ");
         
-        // Show the size in bytes no matter what if using nerd mode
-        if (nerd) {
-            std::cout << file_size << "\n";
-            // Show the sizes and convert them from bytes if not using Nerd Mode
-        } else {
-            if (file_size >= 1000000000000LL) {
-                std::cout << file_size / 1000000000000.0 << " TB (" << file_size << " bytes)\n";
-            }   else if (file_size >= 1000000000LL) {
-                std::cout << file_size / 1000000000.0 << " GB (" << file_size << " bytes)\n";
-            }   else if (file_size >= 1000000LL) {
-                std::cout << file_size / 1000000.0 << " MB (" << file_size << " bytes)\n";
-            }   else if (file_size >= 1000LL) {
-                std::cout << file_size / 1000.0 << " KB (" << file_size << " bytes)\n";
-            }   else {
-                std::cout << file_size << " bytes\n";
-            }
-        }
+        std::cout << "Type: " << type << std::endl; // Show type of path
+        
+        // Annotate size, to ensure that there is no confusion between directory and contents sizes (in case of a directory)
+        std::cout << "Size" << ((type == "directory") && (!nerd) ? " (directory entry): " : ": ");
+        
+        std::cout << getSizeString() << "\n";   // Show size
         
         // List the permissions in rwxr-xr-x style
-        std::cout << "Permissions: ";
-        std::cout << (r_user ? "r" : "-");
-        std::cout << (w_user ? "w" : "-");
-        std::cout << (e_user ? "x" : "-");
-        std::cout << (r_group ? "r" : "-");
-        std::cout << (w_group ? "w" : "-");
-        std::cout << (e_group ? "x" : "-");
-        std::cout << (r_other ? "r" : "-");
-        std::cout << (w_other ? "w" : "-");
-        std::cout << (e_other ? "x" : "-");
-        std::cout << "\n";
+        std::cout << "Permissions: " << perms << "\n";
         
         // Only show info if user is not using Nerd Mode
         if (!nerd) {
@@ -130,22 +111,12 @@ struct PathData {
         }
         
         // Show the owner name if possible
-        if (pw) {
-            std::cout << "Owner: " << pw->pw_name
+            std::cout << "Owner: " << owner
             << " (UID " << UID << ")\n";
-        } else {
-            std::cout << "Owner: <unknown>"
-            << " (UID " << UID << ")\n";
-        }
         
         // Show the group name if possible
-        if (gr) {
-            std::cout << "Group: " << gr->gr_name
+            std::cout << "Group: " << group
             << " (GID " << GID << ")\n";
-        } else {
-            std::cout << "Group: <unknown>"
-            << " (GID " << GID << ")\n";
-        }
         
         // Get access time and show
         std::cout << (nerd ? "atime: " : "Accessed: ") << atime;
@@ -161,11 +132,29 @@ struct PathData {
     void printJson() {
         std::cout << "    {\n";
         std::cout << "      \"path\": \"" << path << "\",\n";
-        std::cout << "      \"type\": \"" << escapeJson(fileType) << "\",\n";
-        std::cout << "      \"size\": " << file_size << ",\n";
+        std::cout << "      \"type\": \"" << escapeJson(type) << "\",\n";
+        std::cout << "      \"size\": " << getSizeString() << ",\n";
+        std::cout << "      \"permissions\": \"" << perms << "\",\n";
+        std::cout << "      \"mode\": " << perm_mode << ",\n";
         std::cout << "      \"uid\": " << UID << ",\n";
-        std::cout << "      \"gid\": " << GID << "\n";
+        std::cout << "      \"gid\": " << GID << ",\n";
+        std::cout << "      \"atime\": " << info.st_atime << ",\n";
+        std::cout << "      \"mtime\": " << info.st_mtime << ",\n";
+        std::cout << "      \"ctime\": " << info.st_ctime << "\n";
         std::cout << "    }";
+    }
+    
+    // Line mode info printing
+    void printHorizontal() {
+        std::cout << path << "  "
+        << type << "  "
+        << getSizeString() << "  "
+        << perms << "   "
+        << owner << " ("
+        << UID << ")  "
+        << group << " ("
+        << GID << ")  "
+        << formatTime(info.st_mtime, "%Y-%m-%d %H:%M") << "\n";
     }
     
     // Changing some problematic characters in the path to ensure that the JSON path isn't broken
@@ -184,7 +173,7 @@ struct PathData {
     }
 
     // Getting file type
-    std::string getFileType() {
+    std::string getType() {
         // Is a regular file?
         if (S_ISREG(info.st_mode)) {
             return "file";
@@ -198,6 +187,42 @@ struct PathData {
         }   else {
             return "other";
         }
+    }
+    
+    // Formatting size (e.g. 16 KB, 16K, etc)
+    std::string getSizeString() {
+        std::string SizeInString = std::to_string(raw_size);    // Covert raw size to a string
+        
+        // Return size in bytes if using nerd mode or JSON formatting without adding size format (e.g. MB or M)
+        if (nerd || json)
+            return SizeInString;
+        
+        // Convert size from bytes to... and add the size format in the end (e.g. MB or M)
+        if (raw_size >= 1000000000000LL) {  // TB / T
+            SizeInString = std::to_string(raw_size / 1000000000000.0) + (line ? "T" : " TB (" + std::to_string(raw_size) + " bytes)");
+        }   else if (raw_size >= 1000000000LL) {    // GB / G
+            SizeInString = std::to_string(raw_size / 1000000000.0) + (line ? "G" : " GB (" + std::to_string(raw_size) + " bytes)");
+        }   else if (raw_size >= 1000000LL) {   // MB / M
+            SizeInString = std::to_string(raw_size / 1000000.0) + (line ? "M" : " MB (" + std::to_string(raw_size) + " bytes)");
+        }   else if (raw_size >= 1000LL) {  // KB / K
+            SizeInString = std::to_string(raw_size / 1000.0) + (line ? "K" : " KB (" + std::to_string(raw_size) + " bytes)");
+        }   else {  // bytes / B
+            SizeInString = std::to_string(raw_size) + (line ? "B" : " bytes");
+        }
+        
+        return SizeInString;    // Return complete string
+    }
+
+    // Formatting time based on provided format (POSIX, thread-safe)
+    std::string formatTime(time_t t, const char* format) {
+        std::tm tm{};
+        localtime_r(&t, &tm);
+
+        char buffer[64];
+        if (std::strftime(buffer, sizeof(buffer), format, &tm)) {
+            return std::string(buffer);
+        }
+        return {};
     }
     
     // Constructor
@@ -215,8 +240,8 @@ struct PathData {
         }
         
         // Gathering info from path
-        fileType = getFileType();   // Type
-        file_size = info.st_size; // Size
+        type = getType();   // Type
+        raw_size = info.st_size; // Size
         r_user = info.st_mode & S_IRUSR;    // Readable by user?
         r_group = info.st_mode & S_IRGRP;   // Readable by group?
         r_other = info.st_mode & S_IROTH;   // Readable by other?
@@ -226,13 +251,36 @@ struct PathData {
         e_user = info.st_mode & S_IXUSR;    // Executable by user?
         e_group = info.st_mode & S_IXGRP;   // Executable by group?
         e_other = info.st_mode & S_IXOTH;   // Executable by other?
+        // Same permissions info in rwxr-xr-x style
+        perms += (r_user ? "r" : "-");
+        perms += (w_user ? "w" : "-");
+        perms += (e_user ? "x" : "-");
+        perms += (r_group ? "r" : "-");
+        perms += (w_group ? "w" : "-");
+        perms += (e_group ? "x" : "-");
+        perms += (r_other ? "r" : "-");
+        perms += (w_other ? "w" : "-");
+        perms += (e_other ? "x" : "-");
         readable = r_user || r_group || r_other;    // Can be read by anyone?
         writable = w_user || w_group || w_other;    // Can be written to by anyone?
         executable = e_user || e_group || e_other;  // Can be executed by anyone?
+        perm_mode = info.st_mode & 0777;    // Get permissions mode (JSON-only)
         UID = info.st_uid;  // User ID
         pw = getpwuid(UID); // Grabbing owner name via UID
         GID = info.st_gid;  // Group ID
         gr = getgrgid(GID); // Grabbing group name via GID
+        // Find the owner name if possible via UID
+        if (pw) {
+            owner = pw->pw_name;
+        } else {
+            owner = "<unknown>";    // Fallback
+        }
+        // Find the group name if possible via GID
+        if (gr) {
+            group = gr->gr_name;
+        } else {
+            group = "<unknown>";    // Fallback
+        }
         // Access, modification and general status time
         atime = std::ctime(&info.st_atime);
         mtime = std::ctime(&info.st_mtime);
@@ -259,6 +307,7 @@ int main(int argc, char * argv[]) {
             {"nerd", no_argument, nullptr, 'n'},    // Nerd argument
             {"json", no_argument, nullptr, 'j'},    // JSON argument
             {"continue-on-error", no_argument, nullptr, 'c'},   // Skip problematic paths
+            {"line", no_argument, nullptr, 'l'},    // Line argument
             {0,0,0,0}
         };
 
@@ -266,7 +315,7 @@ int main(int argc, char * argv[]) {
         int option_index = 0;   // Argument index
 
         // Argument code
-        while ((opt = getopt_long(argc, argv, "vhnjc", long_options, &option_index)) != -1) {
+        while ((opt = getopt_long(argc, argv, "vhnjcl", long_options, &option_index)) != -1) {
             switch (opt) {
                 case 'v':   // Version argument
                     showBanner();
@@ -282,16 +331,15 @@ int main(int argc, char * argv[]) {
                     std::cout << "  -v, --ver       Show version information\n";
                     std::cout << "  -h, --help      Show this help message\n";
                     std::cout << "  -n, --nerd      Hide redundant info for power users\n";
-                    std::cout << "  --json          Print machine-readable JSON to standard output\n\n";
+                    std::cout << "  -j, --json      Print machine-readable JSON to standard output\n";
+                    std::cout << "  -l, --line      Print info in horizontal, one line style\n\n";
                     std::cout << "JSON output:\n";
                     std::cout << "  To save JSON to a file:\n";
                     std::cout << "    inspect <path/s> --json > output.json\n";
                     std::cout << "Error handling:\n";
-                    std::cout << "  --continue-on-error, -c";
+                    std::cout << "  -c, --continue-on-error";
                     std::cout << "      Continue processing remaining paths if one fails.\n                         ";
                     std::cout << "      By default, inspect exits immediately on the first error.\n";
-
-
                     return 0;
                 case 'n':   // Nerd argument
                     nerd = true;    // Enable nerd mode
@@ -301,6 +349,9 @@ int main(int argc, char * argv[]) {
                     break;
                 case 'c':   // Continue on error argument
                     skip = true;    // Enable skipping unopenable paths
+                    break;
+                case 'l':   // Line argument
+                    line = true;    // Enable line mode
                     break;
                 default:    // Invalid argument
                     return 1;
@@ -333,7 +384,7 @@ int main(int argc, char * argv[]) {
         std::cout << "{\n";
         std::cout << "  \"tool\": \"inspect\",\n";
         std::cout << "  \"tool_version\": \"" << utilver << "\",\n";
-        std::cout << "  \"schema_version\": 1,\n";
+        std::cout << "  \"schema_version\": 2,\n";
         std::cout << "  \"data\": [\n";
     }
 
@@ -346,23 +397,26 @@ int main(int argc, char * argv[]) {
             problematicPaths.emplace_back(datalist[i].path);
             
             // Showing skipping warning if a path is unopenable (--continue-on-error)
-            if (!json) {
+            if (!json && !line) {
                 std::cerr << "inspect: skipping problematic path (" << datalist[i].path << ")\n";
                 std::cout << (!datalist[i].isLast ? "------\n" : "");
             }
             continue;
         }
         
-        if (!json) {
-            // Regular format
-            datalist[i].printInfo();
-        } else {
+        if (json) {
             // JSON format (if --json argument is used)
             datalist[i].printJson();
+        }   else if (line) {
+            // Line format (if --line argument is used)
+            datalist[i].printHorizontal();
+        }   else {
+            // Regular format
+            datalist[i].printInfo();
         }
 
         // Visually separating data if multiple paths exist
-        if (!json && !datalist[i].isLast) {
+        if ((!json && !line) && !datalist[i].isLast) {
             std::cout << "------\n";
         }   else if (json) { // Add a comma if there is another path in the queue (JSON formatting)
             if (i + 1 < datalist.size())
@@ -373,14 +427,18 @@ int main(int argc, char * argv[]) {
         }
 }
     
-    // Add necessary brackets to end the JSON and display problematic paths (if using JSON formatting)
+    // Add necessary brackets to end the JSON
     if (json) {
         std::cout << "  ]\n";
         std::cout << "}\n";
-        
+    }
+    
+    // Showing problematic paths (JSON and Line modes)
+    if (json || line) {
         // If any problematic paths were found
         if (problematicPaths.size() > 0) {
-            std::cerr << "\n";
+            if (json)
+                std::cerr << "\n";
             
             // Search for and display every problematic path at the end
             for (size_t i = 0; i < problematicPaths.size(); i++) {
@@ -388,9 +446,9 @@ int main(int argc, char * argv[]) {
             }
             return 1;   // Exit code 1
         }
-    }   else {  // If bot using JSON mode
-        if (problematicPaths.size() > 0)
-            return 1;   // Ensure that exiting code is 1
+    }   else {  // If bot using JSON mode or Line mode
+            if (problematicPaths.size() > 0)
+                return 1;   // Ensure that exiting code is 1
     }
     
     return 0;
